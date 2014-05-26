@@ -1,0 +1,5 @@
+
+for i, name in ipairs(fs.list("lib")) do
+	print("loading "..name)
+	os.loadAPI(fs.combine("lib", name))
+end
