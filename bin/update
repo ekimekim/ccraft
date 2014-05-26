@@ -1,0 +1,48 @@
+
+os.loadAPI("lib/common")
+os.loadAPI("lib/storelib")
+
+-- get info for given path
+-- returns either a table of subpaths, or a string content
+function getPath(url, path)
+	local response = http.get("http://"..url.."/"..path)
+	assert(response, "Failed to http get")
+	local code = response.getResponseCode()
+	assert(code == 200, "http error: "..code)
+	local content = response.readAll()
+	if string.sub(content, 1, 10) == "DIRECTORY\n" then
+		result = common.split(content, "\n")
+		table.remove(result, 1) -- take out DIRECTORY entry
+		return result
+	end
+	return content
+end
+
+-- write files, create dirs and recurse
+-- target is store table of destination dir
+function handlePath(target, url, path)
+	local name = fs.getName(path)
+	local content = getPath(url, path)
+	if type(content) == "table" then
+		target[name] = {}
+		local subtarget = target[name]
+		for i, subname in ipairs(content) do
+			local subpath = fs.combine(path, subname)
+			handlePath(subtarget, url, subpath)
+		end
+	else
+		target[name] = content
+	end
+end
+
+function getAll(targetpath, url)
+	local target = storelib.open(targetpath)
+	for i, name in ipairs(getPath(url, "")) do
+		handlePath(target, url, name)
+	end
+end
+
+local args = {...}
+targetpath = args[1]
+url = args[2] or "98.207.251.38:8000"
+getAll(targetpath, url)
