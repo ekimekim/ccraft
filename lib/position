@@ -1,0 +1,96 @@
+if turtle then
+
+
+os.loadAPI("lib/storelib")
+
+-- position lib identifies positions relative to its home position.
+-- home position may optionally be set as a absolute world position.
+-- home position may be set manually, or implicitly on first load.
+-- facing works similarly - facing 0 is the facing you have on home set,
+-- facing 1 is to the right of that, etc (modulo 4)
+-- FACING ALSO DEFINES THE X AND Z AXES FOR POSITION
+-- +x axis is facing 0, +z is facing 1
+
+-- for brevity's sake, we define the following shorthand types for use in this api:
+--     position table / pos table : a table containing keys x, y and z mapping to respective coords
+
+-- we monkey patch turtle movement functions (up, down, forward, back, turnLeft, turnRight)
+
+store = storelib.open("db/position")
+
+-- set the home position in absolute coords, and set current position relative to home.
+-- args:
+--     home: set absolute position table of the home position, nil if unknown
+--     current: set position relative to new home, nil for default (0,0,0)
+--     facing: set current facing, with the new 0 being the new home facing, nil for default (0)
+-- example:
+--     setHome(nil, nil, nil): set home to current position and facing, with unknown absolute coords
+function setHome(home, current, facing)
+	store.home = home
+	store.current = current or {x=0, y=0, z=0}
+	store.facing = facing or 0
+end
+
+if store.current == nil then
+	setHome(nil, nil, nil)
+end
+
+-- shortcut
+current = store.current
+
+
+-- monkey patch movement fns
+function moveFunc(name, on_success)
+	-- name: move func in turtle.raw
+	-- on_success: action to take after move
+	local move = turtle.raw[name]
+	return function ()
+		if move() then
+			on_success()
+			return true
+		end
+		return false
+	end
+end
+if not turtle.raw then
+	turtle.raw = {
+		up = turtle.up,
+		down = turtle.down,
+		forward = turtle.forward,
+		back = turtle.back,
+		turnLeft = turtle.turnLeft,
+		turnRight = turtle.turnRight
+	}
+end
+turtle.up = moveFunc("up", function() current.y = current.y + 1 end)
+turtle.down = moveFunc("down", function() current.y = current.y - 1 end)
+turtle.turnLeft = moveFunc("turnLeft", function() store.facing = (store.facing - 1) % 4 end)
+turtle.turnRight = moveFunc("turnRight", function() store.facing = (store.facing + 1) % 4 end)
+turtle.forward = moveFunc("forward", function()
+	local axis, sign = getForwardAxis()
+	current[axis] = current[axis] + sign
+end)
+turtle.back = moveFunc("back", function()
+	local axis, sign = getForwardAxis()
+	current[axis] = current[axis] - sign
+end)
+
+
+-- gets forward axis from current facing
+-- returns two: "x" or "z", 1 or -1
+function getForwardAxis()
+	if store.facing == "0" then
+		return "x", 1
+	elseif store.facing == "1" then
+		return "z", 1
+	elseif store.facing == "2" then
+		return "x", -1
+	elseif store.facing == "3" then
+		return "z", -1
+	else
+		assert(false, "Unknown value for facing: "..tostring(store.facing))
+	end
+end
+
+
+end --- if turtle
