@@ -1,0 +1,240 @@
+
+-- storelib is used to create a persistent disk store that will survive
+-- a program, computer or server restart.
+
+-- Get a store object by calling storelib.open(path),
+-- where path is the path on the filesystem to save to.
+-- Note you must use the same path to get back the saved data later,
+-- and different paths are wholly independent, as long as one is not
+-- a subpath of the other (eg. /foo and /foo/bar)
+-- By using a subpath, you can open a subtable of a larger store.
+-- All paths are absolute.
+
+-- To use your store, simply assign to keys of the store table.
+-- You retrieve stored data by looking them up in the table.
+-- Store can store strings and tables. Note that assigning a number or boolean
+-- will work, but it is saved and returned as a string, eg:
+--     lua> store.foo = 123
+--     lua> store.foo == 123
+--     false
+--     lua> store.foo == "123"
+--     true
+-- Assigning any other type (function, userdata, thread) will raise an error.
+
+-- Note that the following keys are special and not available for use in any table or subtable:
+--     "path"
+--     "copy"
+--     "ls"
+--     "toList"
+-- In addition, keys must not contain the "/" character
+
+-- Extended example:
+--     lua> store = storelib.open("mystore")
+--     lua> store.foo = "bar"
+--     lua> store.fib = {1, 1, 2, 3, 5, 8}
+--     lua> store.baz = {}
+--     lua> store.baz.x = "blah"
+--     lua> exit()
+--     > lua
+--     lua> store = storelib.open("mystore")
+--     lua> store.foo
+--     foo
+--     lua> store.fib
+--     {storelib table for path: mystore/fib}
+--     lua> store.fib.copy()
+--     *omitted: key value pairs showing that the list indices have become strings,
+--      eg. "1" maps to "1", "2" maps to "1", "3" maps to "2", ...*
+--     lua> store.fib.toList()
+--     {"1", "1", "2", "3", "5", "8"}
+
+-- Some other notes:
+
+-- Tables are copied, not passed by reference.
+
+-- Tables gotten from store are ALWAYS themselves mini-stores:
+--     open("mystore").foo is equivilent to open("mystore/foo")
+--     (assuming foo is a table)
+-- This also means that in the below example:
+--     foo = store.foo
+--     foo.x = 1
+-- store.foo.x = 1 is persisted to disk.
+-- Use the .copy() method (available on all store tables) to get back an ordinary table.
+
+-- Due to limitations in lua, some operations don't work how you'd expect:
+-- The == operator will not behave correctly unless both sides are a store table.
+-- Use .copy() to compare on contents instead.
+-- Example:
+--     lua> storeA == storeB
+--     true
+--     lua> storeA == storeB.copy()
+--     false
+--     lua> storeA.copy() == storeB.copy()
+--     true
+-- Also, iterating over a store table will not work (it will only return built in stuff like "copy").
+-- Again, use .copy() to get a real table first, or use store.ls()
+-- And the same story for the length # operator.
+
+-- If two programs are accessing the same store, changes should be visible immediately.
+-- But there might be strange race conditions, especially when contents change while looping.
+
+
+function open(path)
+	local path = normalizePath(path)
+	assert(fs.exists(getParent(path)), "open failed: parent directory does not exist")
+	if fs.exists(path) then
+		assert(fs.isDir(path), "open failed: path is not a directory")
+	else
+		assert(not fs.isReadOnly(getParent(path)), "open failed: parent directory is not writable")
+		fs.makeDir(path)
+	end
+	local newtable
+	newtable = {
+		path = path,
+		copy = function() return toBasicTable(newtable) end,
+		ls = function() return fs.list(newtable.path) end,
+		toList = function() return toList(newtable) end
+	}
+	setmetatable(newtable, storetype)
+	return newtable
+end
+
+-- metatable functions
+storetype = {
+
+	__index = function(table, key)
+		if rawget(table, key) ~= nil then
+			return rawget(table, key)
+		end
+		key = tostring(key)
+		assert(checkKey(key), "Invalid store key to lookup: "..key)
+		local path = fs.combine(table.path, key)
+		if not fs.exists(path) then
+			return nil
+		end
+		if fs.isDir(path) then
+			return open(path)
+		end
+		return readFile(path)
+	end,
+
+	__newindex = function(table, key, value)
+		key = tostring(key)
+		assert(checkKey(key), "Invalid store key to assign: "..key)
+		local path = fs.combine(table.path, key)
+		assert(not fs.isReadOnly(path), "Cannot write value to read-only path: "..path)
+
+		if type(value) == "number" or type(value) == "boolean" then
+			value = tostring(value)
+		end
+
+		assert(type(value) == "string" or type(value) == "table" or value == nil,
+		       "Cannot store type: "..type(value))
+		-- clear existing value (if any)
+		-- otherwise mkdir/open could fail if a file/dir is already present
+		-- this also clears any existing contents in a subtable before writing a new one
+		fs.delete(path)
+
+		if value == nil then
+			-- we've deleted the value as required - all done!
+			return
+		end
+		if type(value) == "table" then
+			local subtable = open(path)
+			for subkey, subval in pairs(value) do
+				subtable[subkey] = subval
+			end
+			return
+		end
+		writeFile(path, value)
+	end,
+
+	__tostring = function(table)
+		return string.format("{storelib table for path: %s}", table.path)
+	end,
+
+	__eq = function(tableA, tableB)
+		return tableA.path == tableB.path
+	end
+
+}
+
+-- Convert store table to a basic table
+function toBasicTable(table)
+	local newtable = {}
+	for i, key in ipairs(table.ls()) do
+		local value = table[key]
+		if type(value) == "table" then
+			value = toBasicTable(value)
+		end
+		newtable[key] = value
+	end
+	return newtable
+end
+
+-- Convert store table to a basic table, converting numeric keys to numbers
+-- and discarding all others (ie. making it a list)
+function toList(table)
+	table = toBasicTable(table)
+	local newtable = {}
+	for key, value in pairs(table) do
+		local numkey = tonumber(key)
+		if numkey ~= nil then
+			newtable[numkey] = value
+		end
+	end
+	return newtable
+end
+
+-- Ensure path is in standard format, so later == operations behave.
+-- Returns fixed path.
+function normalizePath(path)
+	return fs.combine("", path)
+end
+
+-- Check that key is valid (not a multi-component path). Returns boolean.
+function checkKey(key)
+	return key == fs.getName(key)
+end
+
+-- Read whole file in binary mode, return string. Raise on error.
+-- We must use binary mode or newlines get stripped
+function readFile(path)
+	local file = fs.open(path, "rb")
+	assert(file, "unknown error opening file for reading: "..path)
+	local data = ""
+	while true do
+		local char = file.read()
+		if char == nil then break end
+		data = data .. string.char(char)
+	end
+	file.close()
+	return data
+end
+
+-- Write string data to file in binary mode. Raise on error.
+-- I can't see anything in particular in the docs that text mode would fuck up
+-- but I don't trust it. It'd probably change \n to \r\n or something.
+function writeFile(path, data)
+	local file = fs.open(path, "wb")
+	assert(file, "unknown error opening file for writing: "..path)
+	for i = 1, string.len(data) do
+		file.write(string.byte(data, i))
+	end
+	file.close()
+end
+
+-- Get the parent directory of path
+-- This is equivilent to fs.getDir(), however that function doesn't exist
+-- until ComputerCraft 1.63 (we're running 1.6)
+function getParent(path)
+	path = fs.combine("", path) -- normalize
+	local s = string.reverse(path)
+	local index = string.find(s, "/")
+	if index == nil then
+		-- path is in root dir
+		return ""
+	end
+	-- index is the index of first / in s, ie. last / in path
+	s = string.sub(s, index+1) -- we cut off up to the first (last) /
+	return string.reverse(s)
+end
