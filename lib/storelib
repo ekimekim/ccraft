@@ -80,12 +80,11 @@
 
 function open(path)
 	local path = normalizePath(path)
-	assert(fs.exists(getParent(path)), "open failed: parent directory does not exist")
 	if fs.exists(path) then
 		assert(fs.isDir(path), "open failed: path is not a directory")
 	else
-		assert(not fs.isReadOnly(getParent(path)), "open failed: parent directory is not writable")
 		fs.makeDir(path)
+		assert(fs.isDir(path), "open failed: path could not be created")
 	end
 	local newtable
 	newtable = {
