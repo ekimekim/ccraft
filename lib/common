@@ -1,0 +1,16 @@
+
+-- split a string by pattern, returning a list
+function split(string, pattern)
+	local result = {}
+	local start = 1
+	while true do
+		local index = string.find(string, pattern, start)
+		if index == nil then
+			table.insert(result, string.sub(string, start))
+			break
+		end
+		table.insert(result, string.sub(string, start, index - 1))
+		start = index + 1
+	end
+	return result
+end
