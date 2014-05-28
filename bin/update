@@ -43,6 +43,6 @@ function getAll(targetpath, url)
 end
 
 local args = {...}
-targetpath = args[1]
+targetpath = args[1] or "/"
 url = args[2] or "98.207.251.38:8000"
 getAll(targetpath, url)

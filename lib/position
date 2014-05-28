@@ -93,4 +93,69 @@ function getForwardAxis()
 end
 
 
+-- Bulk move operation - move in x,y,z relative to current position.
+-- Facing at the end is undefined (use setFacing to reliably set your next facing)
+-- Returns nil on success or positon table of actual x,y,z moved before failure on failure
+-- Args may be in two forms: as seperate x, y, z, or as a position table in first arg.
+function move(x, y, z)
+	-- table arg or seperate?
+	local target
+	if type(x) == "table" then
+		target = x
+	else
+		target = {x=x, y=y, z=z}
+	end
+	-- set nils to 0
+	if not target.x then target.x = 0 end
+	if not target.y then target.y = 0 end
+	if not target.z then target.z = 0 end
+	-- algo: move x first, then z, then y. Break on blocked,
+	-- sleep on fully blocked in all 3, fail after 3 sleeps
+	local failures = 0
+	while target.x ~= 0 or target.y ~= 0 or target.z ~= 0 do
+		local blocked = true
+		while target.x ~= 0 do
+			setFacing((target.x > 0) and 0 or 2)
+			if not turtle.forward() then break end
+			target.x = target.x + ((target.x > 0 and -1 or 1))
+			blocked = false
+		end
+		while target.z ~= 0 do
+			setFacing((target.z > 0) and 1 or 3)
+			if not turtle.forward() then break end
+			target.z = target.z + ((target.z > 0 and -1 or 1))
+			blocked = false
+		end
+		while target.y ~= 0 do
+			local upOrDown = (target.y > 0) and turtle.up or turtle.down
+			if not upOrDown() then break end
+			target.y = target.y + ((target.y > 0 and -1 or 1))
+			blocked = false
+		end
+		if blocked then
+			failures = failures + 1
+			if failures > 3 then return target end
+			sleep(1)
+		else
+			failures = 0
+		end
+	end
+	return nil
+end
+
+-- Set the facing to the given value, executing minimum turns required to reach it
+function setFacing(target)
+	local diff = (target - store.facing) % 4
+	local turnFunc = turtle.turnRight
+	if diff > 2 then
+		diff = (-diff) % 4
+		turnFunc = turtle.turnLeft
+	end
+	for i = 1, diff do
+		turnFunc()
+	end
+	assert(tonumber(store.facing) == target, "setFacing failed to set facing correctly!")
+end
+
+
 end --- if turtle
