@@ -161,10 +161,13 @@ end
 -- move to given position relative to home
 -- returns as per move()
 function moveTo(x, y, z)
+	if type(x) == "table" then
+		x, y, z = x.x, x.y, x.z
+	end
 	local diff = {
-		x = x - current.x,
-		y = y - current.y,
-		z = z - current.z,
+		x = (x or 0) - current.x,
+		y = (y or 0) - current.y,
+		z = (z or 0) - current.z,
 	}
 	return move(diff)
 end

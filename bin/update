@@ -11,7 +11,7 @@ function getPath(url, path)
 	assert(code == 200, "http error: "..code)
 	local content = response.readAll()
 	if string.sub(content, 1, 10) == "DIRECTORY\n" then
-		result = common.split(content, "\n")
+		local result = common.split(content, "\n")
 		table.remove(result, 1) -- take out DIRECTORY entry
 		return result
 	end

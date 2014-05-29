@@ -1,0 +1,120 @@
+
+args = {...}
+WIDTH = tonumber(args[1]) or 16
+CEILING = tonumber(args[2]) or 0
+FUEL_LOWER_LIMIT = args[3] or 512
+
+print("WIDTH = "..WIDTH)
+print("CEILING = "..CEILING)
+print("FUEL_LOWER_LIMIT = "..FUEL_LOWER_LIMIT)
+print("ok? (y|n) ")
+assert(io.read() == "y", "user aborted before starting")
+
+goingDown = true
+function digColumn()
+	if goingDown then
+		print("digging column down")
+		if turtle.detectDown() then turtle.digDown() end
+		while turtle.down() do
+			checkInv()
+			if turtle.detectDown() then turtle.digDown() end
+		end
+	else
+		print("digging column up")
+		if turtle.detectUp() then turtle.digUp() end
+		while turtle.up() and tonumber(position.current.y) < CEILING do
+			checkInv()
+			if turtle.detectUp() then turtle.digUp() end
+		end
+	end
+	goingDown = not goingDown
+end
+
+-- check for fuel and at least one empty slot
+function checkInv()
+	print("checking inv")
+	haveEmpty = false
+	for slot = 1, 16 do
+		turtle.select(slot)
+		while turtle.getFuelLevel() < FUEL_LOWER_LIMIT do
+			if not turtle.refuel(1) then
+				break
+			else
+				print("fuel added from "..slot)
+			end
+		end
+		if turtle.getItemCount(slot) == 0 then
+			if not haveEmpty then print("found empty in "..slot) end
+			haveEmpty = true
+		end
+	end
+	if not haveEmpty then
+		-- inventory is full, return home
+		print("Inventory is full, returning home")
+		local saved = position.current.copy()
+		position.moveTo(0, 0, 0)
+		local allEmpty = false
+		print("waiting for empty inventory...")
+		while not allEmpty do
+			allEmpty = true
+			sleep(1)
+			for slot = 1, 16 do
+				print(turtle.getItemCount(slot))
+				if turtle.getItemCount(slot) ~= 0 then
+					print(slot.." not empty")
+					allEmpty = false
+				end
+			end
+		end
+		position.moveTo(saved)
+	end
+	if turtle.getFuelLevel() < homeDist() * 1.1 then
+		print("low on fuel ("..turtle.getFuelLevel().."), going home")
+		local saved = position.current.copy()
+		position.moveTo(0, 0, 0)
+		print("waiting for more fuel")
+		while turtle.getFuelLevel() < FUEL_LOWER_LIMIT do
+			for slot = 1, 16 do
+				turtle.select(slot)
+				turtle.refuel()
+			end
+			sleep(1)
+		end
+	end
+end
+
+function homeDist()
+	return position.current.x + position.current.y + position.current.z
+end
+
+-- go forward, moving up if needed
+function goForward()
+	while true do
+		if turtle.detect() then turtle.dig() end
+		if turtle.forward() then break end
+		if turtle.detectUp() then turtle.digUp() end
+		assert(turtle.up(), "could not proceed forwards or upwards")
+	end
+end
+
+while true do
+	for z = 1, WIDTH do
+		print("z loop: "..z)
+		digColumn()
+		position.setFacing(1)
+		print("dig forward in z")
+		goForward()
+	end
+	print("moving back up z")
+	remaining = {x=0, y=0, z=-width}
+	while remaining.z ~= 0 do
+		remaining = position.move(remaining)
+		if remaining.z ~= 0 then
+			if turtle.detectUp() then turtle.digUp() end
+			assert(turtle.up(), "could not move back up z, or upwards")
+		end
+	end
+	print("dig forward in x")
+	position.setFacing(0)
+	goForward()
+end
