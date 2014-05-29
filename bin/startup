@@ -1,0 +1,8 @@
+-- reccomended startup script. Note that running it will also install it!
+
+shell.run("bin/update")
+shell.run("bin/loadlibs")
+if fs.exists("startup") then
+	fs.delete("startup")
+end
+fs.copy("bin/startup", "startup")
