@@ -6,3 +6,10 @@ if fs.exists("startup") then
 	fs.delete("startup")
 end
 fs.copy("bin/startup", "startup")
+
+-- run program?
+file = fs.open("main", "r")
+if file then
+	path = file.readAll()
+	shell.run(path)
+end
