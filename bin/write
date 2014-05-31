@@ -1,0 +1,10 @@
+
+args = {...}
+usage = "USAGE: write PATH [VALUE]\nWrite value to path, without trailing newline"
+
+path = args[1]
+value = args[2] or ""
+assert(path, usage)
+
+store = storelib.open(common.getParent(path))
+store[fs.getName(path)] = value
