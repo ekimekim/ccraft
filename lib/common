@@ -1,4 +1,9 @@
 
+-- float constants
+inf = 1/0
+ninf = -inf
+nan = inf + ninf
+
 -- split a string by pattern, returning a list
 function split(string, pattern)
 	local result = {}

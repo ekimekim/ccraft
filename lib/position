@@ -112,6 +112,9 @@ end
 -- Options:
 --     dig: If true, dig to bypass obstacles
 --     stepCB: Callback to run after each successful step. If it returns true, abort the move.
+-- If x, y, or z is set to inf or -inf then movement in that direction will proceed forever
+-- until it cannot. In the "failed" return value, the "unachieved" value will be inf or -inf".
+-- If inf is given, the function cannot return nil.
 function move(x, y, z, options)
 	options = options or {}
 	-- move or dig?
