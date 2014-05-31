@@ -221,19 +221,3 @@ function writeFile(path, data)
 	end
 	file.close()
 end
-
--- Get the parent directory of path
--- This is equivilent to fs.getDir(), however that function doesn't exist
--- until ComputerCraft 1.63 (we're running 1.6)
-function getParent(path)
-	path = fs.combine("", path) -- normalize
-	local s = string.reverse(path)
-	local index = string.find(s, "/")
-	if index == nil then
-		-- path is in root dir
-		return ""
-	end
-	-- index is the index of first / in s, ie. last / in path
-	s = string.sub(s, index+1) -- we cut off up to the first (last) /
-	return string.reverse(s)
-end
