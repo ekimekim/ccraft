@@ -33,3 +33,17 @@ function fuelSearch(limit)
 	end
 	return false
 end
+
+-- waits for func to return true, polling every interval seconds (default 1)
+-- if timeout given, aborts after that time.
+-- returns remaining timeout, or nil if timeout triggered (or if timeout not set)
+function waitFor(func, interval, timeout)
+	local start = os.clock()
+	while not func() do
+		sleep(interval)
+		if timeout and os.clock() - start > timeout then
+			return nil
+		end
+	end
+	return timeout
+end
