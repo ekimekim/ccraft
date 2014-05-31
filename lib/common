@@ -19,3 +19,17 @@ function split(string, pattern)
 	end
 	return result
 end
+
+-- search inventory for fuel until we have at least limit fuel (or nil for turtle limit)
+-- returns true if limit achieved, false if we fell short
+function fuelSearch(limit)
+	limit = limit or turtle.getFuelLimit()
+	for slot = 1, 16 do
+		if turtle.getFuelLevel() >= limit then return true end
+		turtle.select(slot)
+		while turtle.getFuelLevel() < limit do
+			if not turtle.refuel(1) then break end
+		end
+	end
+	return false
+end
