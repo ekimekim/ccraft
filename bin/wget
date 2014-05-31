@@ -1,0 +1,22 @@
+
+args = {...}
+usage = "USAGE: wget PATH [PREFIX [HOSTNAME]]\nDownloads path to the local filesystem under given prefix (or root dir)"
+
+path = args[1]
+assert(path, usage)
+
+prefix = args[2] or ""
+
+ip = args[3] or "98.207.251.38:8000" -- mike's ip
+url = "http://"..ip.."/"..path
+filepath = fs.combine(prefix, fs.getName(path))
+
+response = http.get(url)
+assert(response, "http failed: no response")
+code = response.getResponseCode()
+assert(code == 200, "http failed: code "..code)
+
+data = response.readAll()
+file = fs.open(filepath, "w")
+file.write(data)
+file.close()
