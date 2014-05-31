@@ -1,85 +1,83 @@
 
 args = {...}
+store = storelib.open("db/stripmine")
+
+if not store.target then
+	store.target = {x=0, z=0}
+end
+target = store.target
+
+function log(msg)
+	if not logfile then
+		fs.makeDir("logs")
+		local path = "logs/stripmine"
+		logfile = fs.open(path, (fs.exists(path) and "a" or "w"))
+		assert(logfile, "could not open log file")
+	end
+	print(msg)
+	logfile.writeLine(msg)
+	logfile.flush()
+end
+
 WIDTH = tonumber(args[1]) or 16
 CEILING = tonumber(args[2]) or 0
 FUEL_LOWER_LIMIT = args[3] or 512
 
-print("WIDTH = "..WIDTH)
-print("CEILING = "..CEILING)
-print("FUEL_LOWER_LIMIT = "..FUEL_LOWER_LIMIT)
-print("ok? (y|n) ")
-assert(io.read() == "y", "user aborted before starting")
+log("WIDTH = "..WIDTH)
+log("CEILING = "..CEILING)
+log("FUEL_LOWER_LIMIT = "..FUEL_LOWER_LIMIT)
 
-goingDown = true
+if not store.goingDown then
+	store.goingDown = true
+end
 function digColumn()
-	if goingDown then
-		print("digging column down")
-		if turtle.detectDown() then turtle.digDown() end
-		while turtle.down() do
-			checkInv()
-			if turtle.detectDown() then turtle.digDown() end
-		end
+	local y
+	if store.goingDown == "true" then
+		log("digging column down")
+		y = common.ninf
 	else
-		print("digging column up")
-		if turtle.detectUp() then turtle.digUp() end
-		while turtle.up() and tonumber(position.current.y) < CEILING do
-			checkInv()
-			if turtle.detectUp() then turtle.digUp() end
-		end
+		log("digging column up")
+		y = CEILING
 	end
-	goingDown = not goingDown
+	position.moveTo(nil, y, nil, {dig = true, stepCB = checkInv})
+	log("finished column")
+	store.goingDown = store.goingDown ~= "true"
 end
 
 -- check for fuel and at least one empty slot
 function checkInv()
-	print("checking inv")
+	log("checking inv")
+	-- for empty
 	haveEmpty = false
 	for slot = 1, 16 do
-		turtle.select(slot)
-		while turtle.getFuelLevel() < FUEL_LOWER_LIMIT do
-			if not turtle.refuel(1) then
-				break
-			else
-				print("fuel added from "..slot)
-			end
-		end
 		if turtle.getItemCount(slot) == 0 then
-			if not haveEmpty then print("found empty in "..slot) end
 			haveEmpty = true
 		end
 	end
 	if not haveEmpty then
 		-- inventory is full, return home
-		print("Inventory is full, returning home")
+		log("Inventory is full, returning home")
 		local saved = position.current.copy()
 		position.moveTo(0, 0, 0)
-		local allEmpty = false
-		print("waiting for empty inventory...")
-		while not allEmpty do
-			allEmpty = true
-			sleep(1)
+		log("waiting for empty inventory...")
+		common.waitFor(function()
 			for slot = 1, 16 do
-				print(turtle.getItemCount(slot))
 				if turtle.getItemCount(slot) ~= 0 then
-					print(slot.." not empty")
-					allEmpty = false
+					return false
 				end
 			end
-		end
+			return true
+		end)
 		position.moveTo(saved)
 	end
+	-- for fuel
+	common.fuelSearch(FUEL_LOWER_LIMIT)
 	if turtle.getFuelLevel() < homeDist() * 1.1 then
-		print("low on fuel ("..turtle.getFuelLevel().."), going home")
+		log("low on fuel ("..turtle.getFuelLevel().."), going home")
 		local saved = position.current.copy()
 		position.moveTo(0, 0, 0)
-		print("waiting for more fuel")
-		while turtle.getFuelLevel() < FUEL_LOWER_LIMIT do
-			for slot = 1, 16 do
-				turtle.select(slot)
-				turtle.refuel()
-			end
-			sleep(1)
-		end
+		log("waiting for more fuel")
+		common.waitFor(common.fuelSearch(FUEL_LOWER_LIMIT))
 	end
 end
 
@@ -87,34 +85,24 @@ function homeDist()
 	return position.current.x + position.current.y + position.current.z
 end
 
--- go forward, moving up if needed
-function goForward()
-	while true do
-		if turtle.detect() then turtle.dig() end
-		if turtle.forward() then break end
-		if turtle.detectUp() then turtle.digUp() end
-		assert(turtle.up(), "could not proceed forwards or upwards")
+-- go to target (x,z), moving up around obstacles if needed
+function goToTarget()
+	while position.moveTo(target.x, nil, target.z, {dig = true, stepCB = checkinv}) do
+		assert(not position.move(0, 1, 0, {dig = true, stepCB = checkinv}),
+		       "failed to go to target or move up around obstacle")
 	end
 end
 
+
+-- main loop
 while true do
-	for z = 1, WIDTH do
-		print("z loop: "..z)
-		digColumn()
-		position.setFacing(1)
-		print("dig forward in z")
-		goForward()
+	log("going to column: "..target.x..", "..target.z)
+	goToTarget()
+	digColumn()
+	target.z = target.z + 1
+	if tonumber(target.z) > WIDTH then
+		log("reached end of z row, returning")
+		target.z = 1
+		target.x = target.x + 1
 	end
-	print("moving back up z")
-	remaining = {x=0, y=0, z=-width}
-	while remaining.z ~= 0 do
-		remaining = position.move(remaining)
-		if remaining.z ~= 0 then
-			if turtle.detectUp() then turtle.digUp() end
-			assert(turtle.up(), "could not move back up z, or upwards")
-		end
-	end
-	print("dig forward in x")
-	position.setFacing(0)
-	goForward()
 end
